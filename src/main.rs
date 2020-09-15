@@ -31,20 +31,23 @@ extern crate quick_xml;
 extern crate reqwest;
 extern crate csv;
 extern crate geoutils;
+extern crate structopt;
 
 mod plane;
 mod airport;
 mod job;
+mod args;
 
-use std::env;
 use std::error::Error;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use geoutils::Location;
+use structopt::StructOpt;
 
 use plane::Rentable;
 use airport::Airport;
 use job::Job;
+use args::Args;
 
 fn find_jobs(api_key: &String, airplane_name: &String, airplane_gph: f64, airplane_tas: i32,
     airplane_tank: i32, airplane_pax: i32, airplane_cargo: i32, system_fuel: f64) -> Result<(), Box<dyn Error>>{
@@ -259,9 +262,10 @@ fn parse_and_test_rental(to_parse: String) -> Option<f32>{
     match &to_parse.parse::<f32>(){
         Ok(float) => {
             //println!("Parsed rental price {}", float);
-            match &float{
-                0.0 => rental = None,
-                _ => rental = Some(*float)
+            if float < &0.01{
+                rental = None;
+            } else {
+                rental = Some(*float);
             }
         }
         Err(_e) => rental = None
@@ -296,35 +300,14 @@ fn main() {
     This is free software, and you are welcome to redistribute it
     under certain conditions. Reference the COPYING file
     inside the program source for details.");
-    let args: Vec<String> = env::args().collect();
-    match &args[1][..]{
-        "-q" => {
-            match find_jobs(&args[2], &args[3], args[4].parse::<f64>().unwrap(),
-                 args[5].parse::<i32>().unwrap(), args[6].parse::<i32>().unwrap(),
-                  args[7].parse::<i32>().unwrap(), args[8].parse::<i32>().unwrap(),
-                   args[9].parse::<f64>().unwrap()) {
-                    Ok(_ok) => (), 
-                    Err(err) => {
-                        eprintln!("Error finding job: {}", err);
-                    },
-            }
-        },
-        _ => print_help(&args[1][..]),
+    match Args::from_args(){
+        Args::Query{key, ac_name, gph, tas,
+             max_fuel, max_pax, max_cargo, system_fuel} => {
+                match find_jobs(&key, &ac_name, gph, tas,
+                    max_fuel, max_pax, max_cargo, system_fuel){
+                    Err(e) => println!("Error while finding jobs: {}", e),
+                    Ok(_o) => ()
+                }
+        }
     }
-}
-
-fn print_help(arg: &str){
-    println!("Argument {} not found
-Usages:
-    -q KEY AC_NAME AC_GPH AC_TAS AC_MAX_FUEL AC_MAX_PAX AC_MAX_CARGO SYSTEM_FUEL 
-    Queries FSEconomy using the given args.
-        - KEY: personal API key found in server.fseconomy.net under Home/Data Feeds
-        - AC_NAME: the name of the target plane, as it appears in FSE
-        - AC_GPH: the fuel useage of the target plane, in gph
-        - AC_TAS: the cruising speed of the plane, in knots
-        - AC_MAX_FUEL: the maximum amount of fuel the plane can hold, in gallons
-        - AC_MAX_PAX: the maximum amount of passengers the plane can hold
-        - AC_MAX_CARGO: the maximum amount of cargo the plane can hold, in kg
-        - SYSTEM_FUEL: the price of system fuel (found under Local Market in most airports)
-            ", arg);
 }
